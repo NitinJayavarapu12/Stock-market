@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Stock Insights Frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173"],
+      "port": 5173,
+      "cwd": "frontend"
+    },
+    {
+      "name": "Stock Insights Backend",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": ["backend.main:app", "--port", "8000", "--reload"],
+      "port": 8000
+    },
+    {
+      "name": "Stock Insights (Streamlit)",
+      "runtimeExecutable": "streamlit",
+      "runtimeArgs": ["run", "app.py"],
+      "port": 8501
+    }
+  ]
+}

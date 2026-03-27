@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.db
+.DS_Store
+frontend/node_modules/
+frontend/dist/
+config/watchlist.json
+config/alerts.json
