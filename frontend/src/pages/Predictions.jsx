@@ -4,6 +4,7 @@ import { usePredictionJob } from '../hooks/usePredictionJob'
 import PredictionCard from '../components/PredictionCard'
 import StockChart from '../components/StockChart'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SymbolSearch from '../components/SymbolSearch'
 import { useSessionState } from '../hooks/useSessionState'
 
 const HORIZONS = ['1 Week', '1 Month', '3 Months', '6 Months']
@@ -142,18 +143,17 @@ export default function Predictions() {
         <p className="text-slate-400 text-sm mb-4">
           Uses Meta Prophet to forecast price across 4 time horizons. Takes ~60 seconds.
         </p>
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="e.g. RELIANCE.NS"
-            disabled={status === 'pending' || status === 'starting'}
-            className="flex-1 bg-[#12141e] border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+        <div className="flex gap-2">
+          <SymbolSearch
+            className="flex-1"
+            placeholder="Search company e.g. Reliance, TCS"
+            onSelect={(sym) => { setInput(sym); setSavedPrediction(null); startPrediction(sym) }}
           />
           <button
-            type="submit"
-            disabled={status === 'pending' || status === 'starting'}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg font-medium transition"
+            type="button"
+            disabled={!input || status === 'pending' || status === 'starting'}
+            onClick={() => { if (input) { setSavedPrediction(null); startPrediction(input) } }}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg font-medium transition shrink-0"
           >
             Predict
           </button>

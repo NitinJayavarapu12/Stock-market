@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SymbolSearch from '../components/SymbolSearch'
 
 function AlertRow({ symbol, alerts, onSave, onRemove }) {
   const existing = alerts?.find((a) => a.symbol === symbol) || {}
@@ -80,7 +81,6 @@ function AlertRow({ symbol, alerts, onSave, onRemove }) {
 }
 
 export default function Watchlist() {
-  const [input, setInput] = useState('')
   const qc = useQueryClient()
 
   const { data: watchlist, isLoading } = useQuery({
@@ -99,19 +99,13 @@ export default function Watchlist() {
 
   const addMutation = useMutation({
     mutationFn: (sym) => api.post(`/api/watchlist/${sym}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['watchlist'] }); setInput('') },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['watchlist'] }),
   })
 
   const removeMutation = useMutation({
     mutationFn: (sym) => api.delete(`/api/watchlist/${sym}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['watchlist'] }),
   })
-
-  function handleAdd(e) {
-    e.preventDefault()
-    const sym = input.trim().toUpperCase()
-    if (sym) addMutation.mutate(sym)
-  }
 
   async function saveEmail(e) {
     e.preventDefault()
@@ -138,21 +132,10 @@ export default function Watchlist() {
       <h1 className="text-2xl font-bold text-white">Watchlist</h1>
 
       <div className="bg-[#1e2130] rounded-xl p-5 border border-slate-700/50">
-        <form onSubmit={handleAdd} className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Add stock e.g. TCS.NS"
-            className="flex-1 bg-[#12141e] border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={addMutation.isPending}
-            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg font-medium transition"
-          >
-            Add
-          </button>
-        </form>
+        <SymbolSearch
+          placeholder="Search company to add e.g. Reliance, TCS"
+          onSelect={(sym) => addMutation.mutate(sym)}
+        />
       </div>
 
       {/* Alert email config */}
