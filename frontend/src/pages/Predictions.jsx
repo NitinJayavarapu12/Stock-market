@@ -166,7 +166,7 @@ export default function Predictions() {
               Reset
             </button>
           )}
-        </form>
+        </div>
       </div>
 
       {(status === 'pending' || status === 'starting') && (
