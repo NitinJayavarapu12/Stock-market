@@ -1,18 +1,16 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import Clock from './components/Clock'
 import Dashboard from './pages/Dashboard'
-import StockSearch from './pages/StockSearch'
+import StockAnalysis from './pages/StockAnalysis'
 import Trending from './pages/Trending'
-import AIInsights from './pages/AIInsights'
 import Predictions from './pages/Predictions'
 import Watchlist from './pages/Watchlist'
 import ChatAgent from './pages/ChatAgent'
 
 const NAV = [
   { to: '/', label: '📊 Dashboard' },
-  { to: '/search', label: '🔍 Stock Search' },
+  { to: '/analysis', label: '🔍 Stock Analysis' },
   { to: '/trending', label: '🔥 Trending' },
-  { to: '/ai', label: '🤖 AI Insights' },
   { to: '/predictions', label: '🔮 Predictions' },
   { to: '/watchlist', label: '⭐ Watchlist' },
   { to: '/ask', label: '💬 Ask AI' },
@@ -83,9 +81,8 @@ export default function App() {
           <main className="flex-1 p-4 md:p-6 max-w-5xl w-full mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/search" element={<StockSearch />} />
+              <Route path="/analysis" element={<StockAnalysis />} />
               <Route path="/trending" element={<Trending />} />
-              <Route path="/ai" element={<AIInsights />} />
               <Route path="/predictions" element={<Predictions />} />
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/ask" element={<ChatAgent />} />

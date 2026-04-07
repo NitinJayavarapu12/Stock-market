@@ -1,8 +1,12 @@
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
+import { useSSE } from '../hooks/useSSE'
 import StockChart from '../components/StockChart'
 import SignalBadge from '../components/SignalBadge'
+import StreamingText from '../components/StreamingText'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SymbolSearch from '../components/SymbolSearch'
 import { useSessionState } from '../hooks/useSessionState'
 
 const PERIODS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '2Y': 730 }
@@ -37,11 +41,25 @@ function FundamentalCard({ title, metric }) {
   )
 }
 
-export default function StockSearch() {
-  const [symbol, setSymbol] = useSessionState('ss-symbol', 'RELIANCE.NS')
-  const [input, setInput] = useSessionState('ss-input', 'RELIANCE.NS')
-  const [days, setDays] = useSessionState('ss-days', 365)
-  const [tab, setTab] = useSessionState('ss-tab', 'chart')
+export default function StockAnalysis() {
+  const [symbol, setSymbol] = useSessionState('sa-symbol', '')
+  const [days, setDays] = useSessionState('sa-days', 365)
+  const [tab, setTab] = useSessionState('sa-tab', 'chart')
+  const [savedAnalysis, setSavedAnalysis] = useSessionState('sa-analysis', null)
+
+  const [activeSymbol, setActiveSymbol] = useState('')
+  const [streaming, setStreaming] = useState(false)
+
+  const { text, done, error: sseError } = useSSE(
+    activeSymbol ? `/api/ai/insight/${activeSymbol}` : null,
+    streaming,
+  )
+
+  useEffect(() => {
+    if (done && text && activeSymbol) {
+      setSavedAnalysis({ symbol: activeSymbol, text })
+    }
+  }, [done])
 
   const { data: chartData, isFetching: chartLoading } = useQuery({
     queryKey: ['chart', symbol, days],
@@ -63,45 +81,73 @@ export default function StockSearch() {
     retry: 1,
   })
 
-  function handleSearch(e) {
-    e.preventDefault()
-    if (input.trim()) setSymbol(input.trim().toUpperCase())
-  }
-
   const stats = indData?.stats
   const ind = indData?.indicators
 
+  const isStreaming = streaming || (!!text && !done)
+  const displayText = isStreaming ? text : savedAnalysis?.symbol === symbol ? savedAnalysis?.text : null
+  const showAnalysis = !!displayText || !!sseError
+
+  function handleSelectSymbol(sym) {
+    setSymbol(sym)
+    setSavedAnalysis(null)
+    setActiveSymbol('')
+    setStreaming(false)
+  }
+
+  function handleGetInsight() {
+    if (!symbol) return
+    setSavedAnalysis(null)
+    setActiveSymbol(symbol)
+    setStreaming(true)
+  }
+
+  function handleCancelInsight() {
+    setActiveSymbol('')
+    setStreaming(false)
+  }
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Stock Search</h1>
+      <h1 className="text-2xl font-bold text-white">Stock Analysis</h1>
 
-      {/* Search form */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="e.g. RELIANCE.NS, TCS.NS"
-          className="flex-1 bg-[#1e2130] border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+      {/* Search */}
+      <div className="bg-[#1e2130] rounded-xl p-5 border border-slate-700/50">
+        <SymbolSearch
+          onSelect={handleSelectSymbol}
+          placeholder="Search company e.g. Reliance, Infosys, HDFC Bank"
         />
-        <button
-          type="submit"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium transition"
-        >
-          Search
-        </button>
-      </form>
+      </div>
 
       {/* Stats header */}
       {stats && (
         <div className="bg-[#1e2130] rounded-xl p-4 border border-slate-700/50">
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <h2 className="text-2xl font-bold text-white">
-              ₹{stats.price?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </h2>
-            <span className={`text-sm font-medium ${stats.day_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {stats.day_change >= 0 ? '+' : ''}{stats.day_change?.toFixed(2)} ({stats.day_change_pct?.toFixed(2)}%)
-            </span>
-            <span className="text-slate-400 text-sm">{symbol}</span>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <h2 className="text-2xl font-bold text-white">
+                ₹{stats.price?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </h2>
+              <span className={`text-sm font-medium ${stats.day_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {stats.day_change >= 0 ? '+' : ''}{stats.day_change?.toFixed(2)} ({stats.day_change_pct?.toFixed(2)}%)
+              </span>
+              <span className="text-slate-400 text-sm">{symbol}</span>
+            </div>
+            {/* AI Insight button */}
+            {!isStreaming ? (
+              <button
+                onClick={handleGetInsight}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+              >
+                🤖 Get AI Insight
+              </button>
+            ) : (
+              <button
+                onClick={handleCancelInsight}
+                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+              >
+                Cancel
+              </button>
+            )}
           </div>
           <div className="grid grid-cols-4 gap-4 mt-4 text-sm">
             {[
@@ -123,7 +169,7 @@ export default function StockSearch() {
         </div>
       )}
 
-      {/* Fundamentals row */}
+      {/* Fundamentals */}
       {stats && (
         <div>
           <h3 className="text-sm font-medium text-slate-400 mb-2">Fundamentals</h3>
@@ -135,40 +181,42 @@ export default function StockSearch() {
         </div>
       )}
 
-      {/* Period selector + tabs */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-1">
-          {['chart', 'indicators'].map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition capitalize ${
-                tab === t ? 'bg-blue-600 text-white' : 'bg-[#1e2130] text-slate-400 hover:text-white'
-              }`}
-            >
-              {t === 'chart' ? 'Price Chart' : 'Technical Indicators'}
-            </button>
-          ))}
-        </div>
-        {tab === 'chart' && (
+      {/* Chart tabs + period selector */}
+      {stats && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex gap-1">
-            {Object.entries(PERIODS).map(([label, d]) => (
+            {['chart', 'indicators'].map((t) => (
               <button
-                key={label}
-                onClick={() => setDays(d)}
-                className={`px-3 py-1 rounded text-xs font-medium transition ${
-                  days === d ? 'bg-blue-600 text-white' : 'bg-[#1e2130] text-slate-400 hover:text-white'
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition capitalize ${
+                  tab === t ? 'bg-blue-600 text-white' : 'bg-[#1e2130] text-slate-400 hover:text-white'
                 }`}
               >
-                {label}
+                {t === 'chart' ? 'Price Chart' : 'Technical Indicators'}
               </button>
             ))}
           </div>
-        )}
-      </div>
+          {tab === 'chart' && (
+            <div className="flex gap-1">
+              {Object.entries(PERIODS).map(([label, d]) => (
+                <button
+                  key={label}
+                  onClick={() => setDays(d)}
+                  className={`px-3 py-1 rounded text-xs font-medium transition ${
+                    days === d ? 'bg-blue-600 text-white' : 'bg-[#1e2130] text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Chart tab */}
-      {tab === 'chart' && (
+      {/* Chart */}
+      {stats && tab === 'chart' && (
         <div className="bg-[#1e2130] rounded-xl p-4 border border-slate-700/50">
           {chartLoading ? <LoadingSpinner text="Loading chart..." /> : (
             chartData && <StockChart figJson={chartData} />
@@ -176,8 +224,8 @@ export default function StockSearch() {
         </div>
       )}
 
-      {/* Indicators tab */}
-      {tab === 'indicators' && (
+      {/* Technical indicators */}
+      {stats && tab === 'indicators' && (
         <div className="bg-[#1e2130] rounded-xl p-5 border border-slate-700/50">
           {indLoading ? <LoadingSpinner text="Loading indicators..." /> : ind && (
             <table className="w-full text-sm">
@@ -205,6 +253,35 @@ export default function StockSearch() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* AI Insight loading */}
+      {isStreaming && !text && !sseError && (
+        <LoadingSpinner text="Running predictions then streaming analysis (~60s)..." />
+      )}
+
+      {/* AI Insight error */}
+      {sseError && (
+        <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 text-red-300 text-sm">
+          {sseError}
+        </div>
+      )}
+
+      {/* AI Insight result */}
+      {showAnalysis && displayText && (
+        <div className="bg-[#1e2130] rounded-xl p-6 border border-slate-700/50">
+          <h2 className="text-base font-semibold text-white mb-4">
+            🤖 {symbol} — AI Analysis
+          </h2>
+          <StreamingText text={displayText} done={!isStreaming} />
+        </div>
+      )}
+
+      {showAnalysis && (
+        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-xl p-4 text-yellow-200/70 text-xs">
+          ⚠️ This analysis is for educational purposes only and does not constitute financial advice.
+          Always do your own research before investing.
         </div>
       )}
     </div>
