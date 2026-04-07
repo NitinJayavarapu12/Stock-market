@@ -151,6 +151,46 @@ def get_market_status_label() -> str:
     return "🔴 Market Closed"
 
 
+def fetch_fundamentals(symbol: str) -> dict:
+    """Fetch ROE, ROCE, PEG for a symbol via yf.Ticker.info. Never raises."""
+    symbol = _normalize_symbol(symbol)
+
+    def _fetch_info(sym: str) -> Optional[dict]:
+        try:
+            info = yf.Ticker(sym).info
+            if not info or info.get("regularMarketPrice") is None:
+                return None
+            return info
+        except Exception:
+            return None
+
+    info = _fetch_info(symbol)
+    if info is None:
+        fallback = symbol.replace(".NS", ".BO")
+        if fallback != symbol:
+            info = _fetch_info(fallback)
+
+    if info is None:
+        return {"roe": None, "roce": None, "peg": None}
+
+    raw_roe = info.get("returnOnEquity")
+    roe = round(raw_roe * 100, 2) if raw_roe is not None else None
+
+    raw_peg = info.get("pegRatio")
+    peg = round(float(raw_peg), 2) if raw_peg is not None else None
+
+    ebitda = info.get("ebitda")
+    total_assets = info.get("totalAssets")
+    current_liabilities = info.get("currentLiabilities")
+    roce = None
+    if ebitda and total_assets and current_liabilities:
+        capital_employed = total_assets - current_liabilities
+        if capital_employed > 0:
+            roce = round((ebitda / capital_employed) * 100, 2)
+
+    return {"roe": roe, "roce": roce, "peg": peg}
+
+
 def search_stocks(query: str, top_n: int = 10) -> list[dict]:
     """Fuzzy search over bundled NSE symbol list."""
     from pathlib import Path

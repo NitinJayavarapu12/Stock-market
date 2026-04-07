@@ -8,6 +8,9 @@ DATA
 - 52W High: ₹{week_52_high} | 52W Low: ₹{week_52_low}
 - Volume vs avg: {volume_vs_avg}%
 
+FUNDAMENTALS
+- ROCE: {roce} | ROE: {roe} | PEG: {peg}
+
 TECHNICALS
 - RSI {rsi} → {rsi_signal}
 - MACD: {macd_signal}
@@ -24,9 +27,10 @@ Start with a bold verdict in plain English — something like **"Looks good righ
 
 Then write 4-5 short punchy points:
 - What the numbers actually show (use the real values — RSI, price vs 52W high/low, trend) — translate everything into plain English, no jargon
+- If ROCE or ROE is available, comment on whether the business actually makes good returns or not. If both are N/A, skip this point.
+- If PEG is available, say whether the stock looks cheap or expensive relative to its growth. If N/A, skip this.
 - What the price model suggests
 - The main risk right now (be specific, not generic)
-- One thing to watch
 
 End with a 1-2 sentence honest bottom line. What should he actually do or think about this stock?
 

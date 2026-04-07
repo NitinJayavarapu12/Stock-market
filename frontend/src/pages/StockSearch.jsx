@@ -7,6 +7,36 @@ import { useSessionState } from '../hooks/useSessionState'
 
 const PERIODS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '2Y': 730 }
 
+const FUND_COLOR = {
+  green:  { value: 'text-green-400',  badge: 'bg-green-900/50 text-green-300 border border-green-700' },
+  yellow: { value: 'text-yellow-400', badge: 'bg-yellow-900/50 text-yellow-300 border border-yellow-700' },
+  red:    { value: 'text-red-400',    badge: 'bg-red-900/50 text-red-300 border border-red-700' },
+  gray:   { value: 'text-slate-400',  badge: 'bg-slate-800 text-slate-400 border border-slate-600' },
+}
+
+function FundamentalCard({ title, metric }) {
+  if (!metric) {
+    return (
+      <div className="bg-[#161827] rounded-xl p-4 border border-slate-700/50 animate-pulse">
+        <p className="text-slate-500 text-xs mb-2">{title}</p>
+        <div className="h-6 bg-slate-700 rounded w-16 mb-2" />
+        <div className="h-4 bg-slate-800 rounded w-24" />
+      </div>
+    )
+  }
+  const colors = FUND_COLOR[metric.color] || FUND_COLOR.gray
+  const displayValue = metric.value !== null ? metric.value + metric.unit : 'N/A'
+  return (
+    <div className="bg-[#161827] rounded-xl p-4 border border-slate-700/50">
+      <p className="text-slate-500 text-xs mb-1">{title}</p>
+      <p className={`text-xl font-bold ${colors.value}`}>{displayValue}</p>
+      <span className={`text-xs px-2 py-0.5 rounded mt-1 inline-block ${colors.badge}`}>
+        {metric.label}
+      </span>
+    </div>
+  )
+}
+
 export default function StockSearch() {
   const [symbol, setSymbol] = useSessionState('ss-symbol', 'RELIANCE.NS')
   const [input, setInput] = useSessionState('ss-input', 'RELIANCE.NS')
@@ -23,6 +53,14 @@ export default function StockSearch() {
     queryKey: ['indicators', symbol],
     queryFn: () => api.get(`/api/stocks/${symbol}/indicators`).then((r) => r.data),
     enabled: !!symbol,
+  })
+
+  const { data: fundData } = useQuery({
+    queryKey: ['fundamentals', symbol],
+    queryFn: () => api.get(`/api/stocks/${symbol}/fundamentals`).then((r) => r.data),
+    enabled: !!symbol,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   })
 
   function handleSearch(e) {
@@ -81,6 +119,18 @@ export default function StockSearch() {
                 <p className="text-white">{val}</p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Fundamentals row */}
+      {stats && (
+        <div>
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Fundamentals</h3>
+          <div className="grid grid-cols-3 gap-3">
+            <FundamentalCard title="ROCE" metric={fundData?.roce} />
+            <FundamentalCard title="ROE" metric={fundData?.roe} />
+            <FundamentalCard title="PEG Ratio" metric={fundData?.peg} />
           </div>
         </div>
       )}

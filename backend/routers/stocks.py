@@ -1,6 +1,7 @@
 import json
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
-from data.fetcher import fetch_stock_history, search_stocks
+from data.fetcher import fetch_stock_history, search_stocks, fetch_fundamentals
 from data.processor import get_latest_stats
 from models.indicators import get_indicator_summary
 from ui.charts import plot_candlestick_with_indicators
@@ -8,6 +9,50 @@ from backend.serializers import df_to_records
 from config.settings import HISTORY_DAYS_DEFAULT, NIFTY_50_SYMBOLS
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
+
+
+def _label_roe_roce(value: Optional[float]) -> str:
+    if value is None:
+        return "Not available"
+    if value >= 20:
+        return "Excellent"
+    if value >= 15:
+        return "Good"
+    if value >= 10:
+        return "Fair"
+    return "Weak"
+
+
+def _label_peg(value: Optional[float]) -> str:
+    if value is None:
+        return "Not available"
+    if value < 0.5:
+        return "Potentially Cheap"
+    if value < 1:
+        return "Fairly Valued"
+    if value < 2:
+        return "Slightly Expensive"
+    return "Overvalued"
+
+
+def _color_roe_roce(value: Optional[float]) -> str:
+    if value is None:
+        return "gray"
+    if value >= 15:
+        return "green"
+    if value >= 10:
+        return "yellow"
+    return "red"
+
+
+def _color_peg(value: Optional[float]) -> str:
+    if value is None:
+        return "gray"
+    if value < 1:
+        return "green"
+    if value < 2:
+        return "yellow"
+    return "red"
 
 
 @router.get("/search")
@@ -36,6 +81,31 @@ def stock_indicators(symbol: str):
     return {
         "stats": get_latest_stats(df),
         "indicators": get_indicator_summary(df),
+    }
+
+
+@router.get("/{symbol}/fundamentals")
+def stock_fundamentals(symbol: str):
+    raw = fetch_fundamentals(symbol)
+    return {
+        "roce": {
+            "value": raw["roce"],
+            "label": _label_roe_roce(raw["roce"]),
+            "color": _color_roe_roce(raw["roce"]),
+            "unit": "%",
+        },
+        "roe": {
+            "value": raw["roe"],
+            "label": _label_roe_roce(raw["roe"]),
+            "color": _color_roe_roce(raw["roe"]),
+            "unit": "%",
+        },
+        "peg": {
+            "value": raw["peg"],
+            "label": _label_peg(raw["peg"]),
+            "color": _color_peg(raw["peg"]),
+            "unit": "x",
+        },
     }
 
 

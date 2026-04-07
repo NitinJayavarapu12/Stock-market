@@ -23,7 +23,13 @@ def _is_rate_limit(e: Exception) -> bool:
     return "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
 
 
-def _build_stock_prompt(symbol, company, stats, indicators, predictions):
+def _fmt_fund(value, unit):
+    if value is None:
+        return "N/A"
+    return str(value) + unit
+
+
+def _build_stock_prompt(symbol, company, stats, indicators, predictions, fundamentals=None):
     def _pred(label):
         r = predictions.get(label, {})
         price = r.get("predicted_price")
@@ -40,6 +46,11 @@ def _build_stock_prompt(symbol, company, stats, indicators, predictions):
     p3m, pct3m, r3m = _pred("3 Months")
     p6m, pct6m, r6m = _pred("6 Months")
 
+    fund = fundamentals or {}
+    roce_val = _fmt_fund(fund.get("roce"), "%")
+    roe_val = _fmt_fund(fund.get("roe"), "%")
+    peg_val = _fmt_fund(fund.get("peg"), "x")
+
     return STOCK_INSIGHT_PROMPT.format(
         symbol=symbol, company=company,
         price=stats.get("price", "N/A"),
@@ -54,6 +65,7 @@ def _build_stock_prompt(symbol, company, stats, indicators, predictions):
         ema_20=indicators.get("ema_20", "N/A"),
         ema_50=indicators.get("ema_50", "N/A"),
         trend=indicators.get("trend", "N/A"),
+        roce=roce_val, roe=roe_val, peg=peg_val,
         pred_1w=p1w, pct_1w=pct1w, range_1w=r1w,
         pred_1m=p1m, pct_1m=pct1m, range_1m=r1m,
         pred_3m=p3m, pct_3m=pct3m, range_3m=r3m,
@@ -61,7 +73,7 @@ def _build_stock_prompt(symbol, company, stats, indicators, predictions):
     )
 
 
-def stream_stock_insight(symbol, company, stats, indicators, predictions):
+def stream_stock_insight(symbol, company, stats, indicators, predictions, fundamentals=None):
     """Stream Gemini response token by token (generator)."""
     if not GEMINI_AVAILABLE:
         yield "⚠️ google-genai package not installed. Run: pip install google-genai"
@@ -72,7 +84,7 @@ def stream_stock_insight(symbol, company, stats, indicators, predictions):
         yield "⚠️ Gemini API key not found. Add GEMINI_API_KEY to your .env file."
         return
 
-    prompt = _build_stock_prompt(symbol, company, stats, indicators, predictions)
+    prompt = _build_stock_prompt(symbol, company, stats, indicators, predictions, fundamentals)
     for model in MODELS:
         try:
             for chunk in client.models.generate_content_stream(model=model, contents=prompt):

@@ -3,7 +3,7 @@ import asyncio
 import threading
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from data.fetcher import fetch_stock_history
+from data.fetcher import fetch_stock_history, fetch_fundamentals
 from data.processor import get_latest_stats
 from models.indicators import get_indicator_summary
 from models.predictor import predict_all_horizons
@@ -34,6 +34,7 @@ async def ai_insight(symbol: str):
         yield f"data: {progress_msg}\n\n"
 
         predictions = await loop.run_in_executor(None, predict_all_horizons, df, symbol)
+        fundamentals = await loop.run_in_executor(None, fetch_fundamentals, symbol)
         company = symbol.replace(".NS", "").replace(".BO", "")
 
         # Stream Gemini tokens progressively via a queue
@@ -41,7 +42,7 @@ async def ai_insight(symbol: str):
 
         def _producer():
             try:
-                for chunk in stream_stock_insight(symbol, company, stats, indicators, predictions):
+                for chunk in stream_stock_insight(symbol, company, stats, indicators, predictions, fundamentals):
                     asyncio.run_coroutine_threadsafe(queue.put(chunk), loop)
             finally:
                 asyncio.run_coroutine_threadsafe(queue.put(None), loop)
