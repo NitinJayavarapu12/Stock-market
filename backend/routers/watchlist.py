@@ -1,49 +1,10 @@
-import os
-import json
-import requests
-from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
+from backend.auth import get_user_id
+from backend.supabase_client import get_supabase
 from data.fetcher import fetch_stock_history
 from data.processor import get_latest_stats
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
-
-JSONBIN_API_KEY = os.getenv("JSONBIN_API_KEY", "")
-JSONBIN_BIN_ID = os.getenv("JSONBIN_BIN_ID", "")
-
-_LOCAL_PATH = Path(__file__).parent.parent.parent / "config" / "watchlist.json"
-
-
-def _load() -> list:
-    if JSONBIN_API_KEY and JSONBIN_BIN_ID:
-        try:
-            resp = requests.get(
-                f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest",
-                headers={"X-Master-Key": JSONBIN_API_KEY},
-                timeout=5,
-            )
-            resp.raise_for_status()
-            return resp.json().get("record", [])
-        except Exception:
-            pass
-    if _LOCAL_PATH.exists():
-        return json.loads(_LOCAL_PATH.read_text())
-    return []
-
-
-def _save(symbols: list):
-    if JSONBIN_API_KEY and JSONBIN_BIN_ID:
-        try:
-            requests.put(
-                f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}",
-                headers={"X-Master-Key": JSONBIN_API_KEY, "Content-Type": "application/json"},
-                json=symbols,
-                timeout=5,
-            )
-            return
-        except Exception:
-            pass
-    _LOCAL_PATH.write_text(json.dumps(symbols, indent=2))
 
 
 def _normalize(symbol: str) -> str:
@@ -54,32 +15,38 @@ def _normalize(symbol: str) -> str:
 
 
 @router.get("")
-def get_watchlist():
-    symbols = _load()
+def get_watchlist(user_id: str = Depends(get_user_id)):
+    sb = get_supabase()
+    resp = sb.table("watchlist").select("*").eq("user_id", user_id).execute()
+    items = resp.data or []
+
     result = []
-    for sym in symbols:
+    for item in items:
+        sym = item["symbol"]
         df = fetch_stock_history(sym)
         if df is not None and not df.empty:
             stats = get_latest_stats(df)
-            result.append({"symbol": sym, **stats})
+            result.append({"symbol": sym, "company": item.get("company", ""), **stats})
         else:
-            result.append({"symbol": sym})
+            result.append({"symbol": sym, "company": item.get("company", "")})
     return result
 
 
 @router.post("/{symbol}")
-def add_to_watchlist(symbol: str):
+def add_to_watchlist(symbol: str, user_id: str = Depends(get_user_id)):
+    sb = get_supabase()
     sym = _normalize(symbol)
-    symbols = _load()
-    if sym not in symbols:
-        symbols.append(sym)
-        _save(symbols)
-    return {"symbols": symbols}
+    company = sym.replace(".NS", "").replace(".BO", "")
+    sb.table("watchlist").upsert(
+        {"user_id": user_id, "symbol": sym, "company": company},
+        on_conflict="user_id,symbol"
+    ).execute()
+    return {"ok": True}
 
 
 @router.delete("/{symbol}")
-def remove_from_watchlist(symbol: str):
+def remove_from_watchlist(symbol: str, user_id: str = Depends(get_user_id)):
+    sb = get_supabase()
     sym = _normalize(symbol)
-    symbols = [s for s in _load() if s != sym]
-    _save(symbols)
-    return {"symbols": symbols}
+    sb.table("watchlist").delete().eq("user_id", user_id).eq("symbol", sym).execute()
+    return {"ok": True}

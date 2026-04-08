@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-from backend.routers import market, stocks, trending, watchlist, ai, predictions, chat, alerts
+from backend.routers import market, stocks, trending, watchlist, ai, predictions, chat, alerts, portfolio
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app.include_router(ai.router)
 app.include_router(predictions.router)
 app.include_router(chat.router)
 app.include_router(alerts.router)
+app.include_router(portfolio.router)
 
 
 @app.get("/api/health")
