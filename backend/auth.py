@@ -4,11 +4,15 @@ from fastapi import Depends, HTTPException, Header
 from typing import Optional
 
 
-def _get_secret() -> str:
+def _get_secret() -> bytes:
     secret = os.getenv("SUPABASE_JWT_SECRET", "")
     if not secret:
         raise HTTPException(status_code=500, detail="Auth not configured")
-    return secret
+    import base64
+    try:
+        return base64.b64decode(secret)
+    except Exception:
+        return secret.encode("utf-8")
 
 
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> dict:
