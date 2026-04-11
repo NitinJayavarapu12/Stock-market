@@ -46,6 +46,8 @@ function PortfolioSection() {
   const [qty, setQty] = useState('')
   const [buyPrice, setBuyPrice] = useState('')
   const [saving, setSaving] = useState(false)
+  const [csvUploading, setCsvUploading] = useState(false)
+  const [csvMsg, setCsvMsg] = useState('')
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['portfolio'],
@@ -79,19 +81,47 @@ function PortfolioSection() {
     refetch()
   }
 
+  async function handleCsvUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCsvUploading(true)
+    setCsvMsg('')
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const resp = await api.post('/api/portfolio/upload-csv', form)
+      setCsvMsg(`✓ Imported ${resp.data.imported} holdings`)
+      refetch()
+    } catch (err) {
+      setCsvMsg(err.response?.data?.detail || 'CSV upload failed')
+    } finally {
+      setCsvUploading(false)
+      e.target.value = ''
+    }
+  }
+
   if (isLoading) return <LoadingSpinner text="Loading portfolio..." />
 
   return (
     <div className="bg-[#1e2130] rounded-xl p-5 border border-slate-700/50">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-white">My Portfolio</h2>
-        <button
-          onClick={() => setShowAdd(s => !s)}
-          className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition"
-        >
-          {showAdd ? 'Cancel' : '+ Add Stock'}
-        </button>
+        <div className="flex items-center gap-2">
+          <label className={`text-xs px-3 py-1.5 rounded-lg transition cursor-pointer ${csvUploading ? 'bg-slate-600 text-slate-400' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}>
+            {csvUploading ? 'Uploading...' : '⬆ Upload CSV'}
+            <input type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} disabled={csvUploading} />
+          </label>
+          <button
+            onClick={() => setShowAdd(s => !s)}
+            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition"
+          >
+            {showAdd ? 'Cancel' : '+ Add Stock'}
+          </button>
+        </div>
       </div>
+      {csvMsg && (
+        <p className={`text-xs mb-3 ${csvMsg.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>{csvMsg}</p>
+      )}
 
       {/* Summary cards */}
       {summary && summary.count > 0 && (
