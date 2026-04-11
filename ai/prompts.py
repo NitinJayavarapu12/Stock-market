@@ -50,6 +50,23 @@ Top Losers: {losers}
 Write 2-3 sentences max. Tell him what the market is doing today and if anything stands out. Be direct — is it a good day, bad day, or mixed? Mention one specific thing worth noting (a big gainer, a big loser, or the overall mood). Plain language, no jargon.
 """
 
+ALERT_COMMENTARY_PROMPT = """
+You are texting a casual Indian retail investor an urgent market alert. Be his sharp, honest friend — direct, no fluff, like a quick WhatsApp message.
+
+ALERT: {alert_type}
+Stock/Index: {symbol}
+Current Price: ₹{current_price}
+Today's Move: {today_return_pct}% (Z-score: {z_score} — this move is {z_description} times larger than its usual daily swings)
+20-day average daily move: {mean_return_pct}%
+
+Write 3-4 short punchy lines:
+- What exactly is happening (use the real numbers)
+- Whether this looks like panic/euphoria or something structural
+- What the investor should do right now — hold, watch, or act?
+
+Be honest and decisive. No jargon. No "bullish"/"bearish". Max 100 words. End with: *Not financial advice.*
+"""
+
 TRENDING_COMMENTARY_PROMPT = """
 You are texting a casual Indian retail investor about what's moving in the market today.
 

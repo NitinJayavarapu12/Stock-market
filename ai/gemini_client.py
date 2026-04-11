@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from ai.prompts import STOCK_INSIGHT_PROMPT, MARKET_OVERVIEW_PROMPT, TRENDING_COMMENTARY_PROMPT
+from ai.prompts import STOCK_INSIGHT_PROMPT, MARKET_OVERVIEW_PROMPT, TRENDING_COMMENTARY_PROMPT, ALERT_COMMENTARY_PROMPT
 
 try:
     from google import genai
@@ -135,6 +135,43 @@ def generate_market_overview(index_data: dict, movers: dict) -> str:
         try:
             response = client.models.generate_content(model=model, contents=prompt)
             return response.text
+        except Exception as e:
+            if _is_rate_limit(e) and model != MODELS[-1]:
+                continue
+            if _is_rate_limit(e):
+                from ai.groq_client import complete_groq
+                return complete_groq(prompt)
+            return ""
+    return ""
+
+
+def generate_alert_commentary(symbol: str, alert_type: str, z_score: float,
+                              today_return_pct: float, current_price: float,
+                              mean_return_pct: float) -> str:
+    """Generate a short AI commentary for a market anomaly or watchlist spike alert."""
+    if not GEMINI_AVAILABLE:
+        return ""
+    client = _get_client()
+    if client is None:
+        return ""
+
+    z_abs = abs(z_score)
+    z_description = f"{z_abs:.1f}"
+
+    prompt = ALERT_COMMENTARY_PROMPT.format(
+        alert_type=alert_type,
+        symbol=symbol,
+        current_price=f"{current_price:,.2f}",
+        today_return_pct=f"{today_return_pct:+.2f}",
+        z_score=f"{z_score:+.2f}",
+        z_description=z_description,
+        mean_return_pct=f"{mean_return_pct:+.4f}",
+    )
+
+    for model in MODELS:
+        try:
+            response = client.models.generate_content(model=model, contents=prompt)
+            return response.text or ""
         except Exception as e:
             if _is_rate_limit(e) and model != MODELS[-1]:
                 continue

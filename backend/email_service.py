@@ -283,6 +283,94 @@ def send_closing_report(to: str, watchlist_symbols: list[str] = None, portfolio_
     return _send(to, f"📊 Market Closing — {date_str}", html)
 
 
+def send_market_anomaly_alert(to: str, index_name: str, stats: dict, commentary: str):
+    """Send an alert when a market index makes a statistically unusual move."""
+    z = stats["z_score"]
+    today_return = stats["today_return_pct"]
+    current_price = stats["current_price"]
+    direction = "surged" if z > 0 else "crashed"
+    color = "#4ade80" if z > 0 else "#f87171"
+    icon = "🚀" if z > 0 else "🔻"
+    sign = "+" if today_return >= 0 else ""
+
+    commentary_html = ""
+    if commentary:
+        lines = commentary.strip().replace("\n\n", "\n").split("\n")
+        commentary_html = "".join(
+            f"<p style='color:#e2e8f0;font-size:14px;margin:6px 0'>{line}</p>"
+            for line in lines if line.strip()
+        )
+
+    body = f"""
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 16px">
+      {icon} <strong style="color:{color}">{index_name}</strong> has made an unusually large move today.
+      This is <strong style="color:#fff">{abs(z):.1f}x</strong> larger than its normal daily swing.
+    </p>
+    <div style="margin-bottom:20px">
+      {_card("Current Level", f"₹{current_price:,.2f}", "", "#ffffff")}
+      {_card("Today's Move", f"{sign}{today_return:.2f}%", f"Z-score: {z:+.2f}", color)}
+      {_card("Normal Daily Move", f"±{abs(stats['std_pct']):.2f}%", "20-day avg volatility", "#94a3b8")}
+    </div>
+    <div style="background:#12141e;border-left:3px solid {color};border-radius:4px;padding:14px;margin-top:8px">
+      <p style="color:#64748b;font-size:11px;font-weight:600;margin:0 0 8px;text-transform:uppercase">AI Analysis</p>
+      {commentary_html or '<p style="color:#94a3b8;font-size:13px">No commentary available.</p>'}
+    </div>"""
+
+    now = datetime.now(IST)
+    html = _base_template(
+        f"{icon} Market Alert: {index_name} {direction.title()}",
+        now.strftime("%A, %d %B %Y — %I:%M %p IST"),
+        body,
+    )
+    subject = f"{icon} {index_name} {direction} {sign}{today_return:.2f}% — Unusual Market Move"
+    return _send(to, subject, html)
+
+
+def send_watchlist_spike_alert(to: str, symbol: str, stats: dict, commentary: str):
+    """Send an alert when a watchlist stock makes a statistically unusual move."""
+    sym_clean = symbol.replace(".NS", "").replace(".BO", "")
+    z = stats["z_score"]
+    today_return = stats["today_return_pct"]
+    current_price = stats["current_price"]
+    direction = "surged" if z > 0 else "dropped sharply"
+    color = "#4ade80" if z > 0 else "#f87171"
+    icon = "📈" if z > 0 else "📉"
+    sign = "+" if today_return >= 0 else ""
+
+    commentary_html = ""
+    if commentary:
+        lines = commentary.strip().replace("\n\n", "\n").split("\n")
+        commentary_html = "".join(
+            f"<p style='color:#e2e8f0;font-size:14px;margin:6px 0'>{line}</p>"
+            for line in lines if line.strip()
+        )
+
+    body = f"""
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 16px">
+      {icon} <strong style="color:#fff">{sym_clean}</strong> (from your watchlist) has {direction} today —
+      <strong style="color:{color}">{sign}{today_return:.2f}%</strong>, which is
+      <strong style="color:#fff">{abs(z):.1f}x</strong> larger than its normal daily move.
+    </p>
+    <div style="margin-bottom:20px">
+      {_card("Current Price", f"₹{current_price:,.2f}", "", "#ffffff")}
+      {_card("Today's Move", f"{sign}{today_return:.2f}%", f"Z-score: {z:+.2f}", color)}
+      {_card("Normal Daily Move", f"±{abs(stats['std_pct']):.2f}%", "20-day avg volatility", "#94a3b8")}
+    </div>
+    <div style="background:#12141e;border-left:3px solid {color};border-radius:4px;padding:14px;margin-top:8px">
+      <p style="color:#64748b;font-size:11px;font-weight:600;margin:0 0 8px;text-transform:uppercase">AI Analysis</p>
+      {commentary_html or '<p style="color:#94a3b8;font-size:13px">No commentary available.</p>'}
+    </div>"""
+
+    now = datetime.now(IST)
+    html = _base_template(
+        f"{icon} Watchlist Alert: {sym_clean}",
+        now.strftime("%A, %d %B %Y — %I:%M %p IST"),
+        body,
+    )
+    subject = f"{icon} {sym_clean} {direction} {sign}{today_return:.2f}% — Unusual Move Detected"
+    return _send(to, subject, html)
+
+
 def send_price_alert(to: str, symbol: str, current_price: float, threshold: float, direction: str):
     sym_clean = symbol.replace(".NS", "").replace(".BO", "")
     direction_word = "risen above" if direction == "above" else "fallen below"

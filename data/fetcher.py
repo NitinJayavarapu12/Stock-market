@@ -191,6 +191,49 @@ def fetch_fundamentals(symbol: str) -> dict:
     return {"roe": roe, "roce": roce, "peg": peg}
 
 
+def fetch_volatility_stats(symbol: str, days: int = 25) -> Optional[dict]:
+    """
+    Calculate rolling volatility stats for anomaly detection.
+    Returns mean daily return, std, today's return, Z-score, and current price.
+    A Z-score > 2 or < -2 means today's move is statistically unusual.
+    """
+    symbol = _normalize_symbol(symbol)
+    df = fetch_stock_history(symbol, days=days)
+    if df is None or df.empty or len(df) < 5:
+        return None
+
+    closes = df["Close"].dropna()
+    if len(closes) < 5:
+        return None
+
+    daily_returns = closes.pct_change().dropna()
+    if len(daily_returns) < 3:
+        return None
+
+    # Use all but the last return to compute historical baseline
+    history = daily_returns.iloc[:-1]
+    today_return = float(daily_returns.iloc[-1])
+    mean = float(history.mean())
+    std = float(history.std())
+
+    if std == 0:
+        return None
+
+    z_score = (today_return - mean) / std
+    current_price = float(closes.iloc[-1])
+    prev_price = float(closes.iloc[-2])
+
+    return {
+        "symbol": symbol,
+        "current_price": round(current_price, 2),
+        "prev_price": round(prev_price, 2),
+        "today_return_pct": round(today_return * 100, 2),
+        "mean_return_pct": round(mean * 100, 4),
+        "std_pct": round(std * 100, 4),
+        "z_score": round(z_score, 2),
+    }
+
+
 def search_stocks(query: str, top_n: int = 10) -> list[dict]:
     """Fuzzy search over bundled NSE symbol list."""
     from pathlib import Path
