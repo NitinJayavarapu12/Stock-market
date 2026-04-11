@@ -57,14 +57,131 @@ def _base_template(title: str, subtitle: str, body: str) -> str:
 </body></html>"""
 
 
-def send_opening_report(to: str):
+def _watchlist_section(symbols: list[str]) -> str:
+    """Build watchlist HTML rows for email reports."""
+    if not symbols:
+        return ""
+    try:
+        from data.fetcher import fetch_stock_history
+        from data.processor import get_latest_stats
+
+        rows = ""
+        for sym in symbols:
+            df = fetch_stock_history(sym)
+            if df is None or df.empty:
+                continue
+            stats = get_latest_stats(df)
+            price = stats.get("price", 0)
+            chg = stats.get("day_change_pct", 0)
+            color = "#4ade80" if chg >= 0 else "#f87171"
+            sign = "+" if chg >= 0 else ""
+            rows += (
+                f"<tr style='border-bottom:1px solid #1e293b'>"
+                f"<td style='padding:8px;color:#fff;font-weight:600'>{sym.replace('.NS','').replace('.BO','')}</td>"
+                f"<td style='padding:8px;color:#e2e8f0'>₹{price:,.2f}</td>"
+                f"<td style='padding:8px;color:{color};font-weight:600'>{sign}{chg:.2f}%</td>"
+                f"</tr>"
+            )
+
+        if not rows:
+            return ""
+
+        return f"""
+        <div style="margin-top:24px">
+          <p style="color:#94a3b8;font-size:13px;font-weight:600;margin:0 0 10px">⭐ Your Watchlist</p>
+          <table style="width:100%;border-collapse:collapse;background:#12141e;border-radius:8px">
+            <thead><tr style="border-bottom:1px solid #334155">
+              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Symbol</th>
+              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Price</th>
+              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Day %</th>
+            </tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>"""
+    except Exception:
+        return ""
+
+
+def _portfolio_section(holdings: list[dict]) -> str:
+    """Build portfolio P&L HTML section for email reports."""
+    if not holdings:
+        return ""
+    try:
+        from data.fetcher import fetch_stock_history
+        from data.processor import get_latest_stats
+
+        total_invested = 0.0
+        total_value = 0.0
+        rows = ""
+
+        for h in holdings:
+            sym = h.get("symbol", "")
+            qty = float(h.get("quantity", 0))
+            avg_price = float(h.get("avg_buy_price", 0))
+            invested = qty * avg_price
+
+            df = fetch_stock_history(sym)
+            current_price = avg_price  # fallback
+            if df is not None and not df.empty:
+                stats = get_latest_stats(df)
+                current_price = stats.get("price", avg_price) or avg_price
+
+            value = qty * current_price
+            pnl = value - invested
+            pnl_pct = (pnl / invested * 100) if invested > 0 else 0
+            total_invested += invested
+            total_value += value
+
+            pnl_color = "#4ade80" if pnl >= 0 else "#f87171"
+            sign = "+" if pnl >= 0 else ""
+            rows += (
+                f"<tr style='border-bottom:1px solid #1e293b'>"
+                f"<td style='padding:8px;color:#fff;font-weight:600'>{sym.replace('.NS','').replace('.BO','')}</td>"
+                f"<td style='padding:8px;color:#e2e8f0'>{qty:g}</td>"
+                f"<td style='padding:8px;color:#e2e8f0'>₹{current_price:,.2f}</td>"
+                f"<td style='padding:8px;color:{pnl_color};font-weight:600'>{sign}₹{pnl:,.0f} ({sign}{pnl_pct:.1f}%)</td>"
+                f"</tr>"
+            )
+
+        if not rows:
+            return ""
+
+        total_pnl = total_value - total_invested
+        total_pnl_pct = (total_pnl / total_invested * 100) if total_invested > 0 else 0
+        pnl_color = "#4ade80" if total_pnl >= 0 else "#f87171"
+        sign = "+" if total_pnl >= 0 else ""
+
+        summary_cards = (
+            _card("Invested", f"₹{total_invested:,.0f}", "", "#e2e8f0") +
+            _card("Current Value", f"₹{total_value:,.0f}", "", "#ffffff") +
+            _card("Total P&L", f"{sign}₹{total_pnl:,.0f}", f"{sign}{total_pnl_pct:.1f}%", pnl_color)
+        )
+
+        return f"""
+        <div style="margin-top:24px">
+          <p style="color:#94a3b8;font-size:13px;font-weight:600;margin:0 0 10px">💼 Your Portfolio</p>
+          <div style="margin-bottom:12px">{summary_cards}</div>
+          <table style="width:100%;border-collapse:collapse;background:#12141e;border-radius:8px">
+            <thead><tr style="border-bottom:1px solid #334155">
+              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Stock</th>
+              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Qty</th>
+              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Price</th>
+              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">P&L</th>
+            </tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>"""
+    except Exception:
+        return ""
+
+
+def send_opening_report(to: str, watchlist_symbols: list[str] = None, portfolio_holdings: list[dict] = None):
     from data.fetcher import fetch_index_data, fetch_movers
     from config.settings import INDICES
 
     now = datetime.now(IST)
     date_str = now.strftime("%A, %d %B %Y")
 
-    # Indices
     index_cards = ""
     for name, symbol in INDICES.items():
         d = fetch_index_data(symbol)
@@ -74,7 +191,6 @@ def send_opening_report(to: str):
             sign = "+" if chg >= 0 else ""
             index_cards += _card(name, f"₹{d['current']:,.2f}", f"{sign}{chg:.2f}%", color)
 
-    # Movers
     movers = fetch_movers()
     gainers_rows = "".join(
         f"<tr><td style='padding:6px 8px;color:#fff'>{g['symbol'].replace('.NS','')}</td>"
@@ -99,24 +215,21 @@ def send_opening_report(to: str):
       </div>
     </div>"""
 
-    # Watchlist
-    watchlist_html = _watchlist_section()
+    watchlist_html = _watchlist_section(watchlist_symbols or [])
+    portfolio_html = _portfolio_section(portfolio_holdings or [])
 
     body = f"""
     <div style="margin-bottom:20px">{index_cards}</div>
     {movers_html}
+    {portfolio_html}
     {watchlist_html}
     <p style="color:#64748b;font-size:12px;margin-top:20px">Market opens at 9:15 AM IST. Good luck today! 🎯</p>"""
 
-    html = _base_template(
-        "🌅 Market Opening Report",
-        date_str,
-        body,
-    )
+    html = _base_template("🌅 Market Opening Report", date_str, body)
     return _send(to, f"📈 Market Opening — {date_str}", html)
 
 
-def send_closing_report(to: str):
+def send_closing_report(to: str, watchlist_symbols: list[str] = None, portfolio_holdings: list[dict] = None):
     from data.fetcher import fetch_index_data, fetch_movers
     from config.settings import INDICES
 
@@ -156,68 +269,18 @@ def send_closing_report(to: str):
       </div>
     </div>"""
 
-    watchlist_html = _watchlist_section()
+    watchlist_html = _watchlist_section(watchlist_symbols or [])
+    portfolio_html = _portfolio_section(portfolio_holdings or [])
 
     body = f"""
     <div style="margin-bottom:20px">{index_cards}</div>
     {movers_html}
+    {portfolio_html}
     {watchlist_html}
     <p style="color:#64748b;font-size:12px;margin-top:20px">Market closed at 3:30 PM IST. See you tomorrow! 🌙</p>"""
 
     html = _base_template("🌇 Market Closing Report", date_str, body)
     return _send(to, f"📊 Market Closing — {date_str}", html)
-
-
-def _watchlist_section() -> str:
-    """Build watchlist HTML rows for email reports."""
-    try:
-        import json
-        from pathlib import Path
-        from data.fetcher import fetch_stock_history
-        from data.processor import get_latest_stats
-
-        wl_path = Path(__file__).parent.parent / "config" / "watchlist.json"
-        if not wl_path.exists():
-            return ""
-        symbols = json.loads(wl_path.read_text())
-        if not symbols:
-            return ""
-
-        rows = ""
-        for sym in symbols:
-            df = fetch_stock_history(sym)
-            if df is None or df.empty:
-                continue
-            stats = get_latest_stats(df)
-            price = stats.get("price", 0)
-            chg = stats.get("day_change_pct", 0)
-            color = "#4ade80" if chg >= 0 else "#f87171"
-            sign = "+" if chg >= 0 else ""
-            rows += (
-                f"<tr style='border-bottom:1px solid #1e293b'>"
-                f"<td style='padding:8px;color:#fff;font-weight:600'>{sym.replace('.NS','')}</td>"
-                f"<td style='padding:8px;color:#e2e8f0'>₹{price:,.2f}</td>"
-                f"<td style='padding:8px;color:{color};font-weight:600'>{sign}{chg:.2f}%</td>"
-                f"</tr>"
-            )
-
-        if not rows:
-            return ""
-
-        return f"""
-        <div style="margin-top:24px">
-          <p style="color:#94a3b8;font-size:13px;font-weight:600;margin:0 0 10px">⭐ Your Watchlist</p>
-          <table style="width:100%;border-collapse:collapse;background:#12141e;border-radius:8px">
-            <thead><tr style="border-bottom:1px solid #334155">
-              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Symbol</th>
-              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Price</th>
-              <th style="padding:8px;color:#64748b;text-align:left;font-size:12px">Day %</th>
-            </tr></thead>
-            <tbody>{rows}</tbody>
-          </table>
-        </div>"""
-    except Exception:
-        return ""
 
 
 def send_price_alert(to: str, symbol: str, current_price: float, threshold: float, direction: str):
