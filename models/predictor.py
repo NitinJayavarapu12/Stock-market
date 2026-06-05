@@ -9,14 +9,31 @@ except ImportError:
     PROPHET_AVAILABLE = False
 
 
+def _compute_rsi(close: pd.Series, period: int = 14) -> pd.Series:
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(period).mean()
+    loss = (-delta.clip(upper=0)).rolling(period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+
 def _prepare_prophet_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert OHLCV dataframe to Prophet's ds/y format."""
-    prophet_df = df[["Close"]].copy()
-    prophet_df.index = pd.to_datetime(prophet_df.index)
-    prophet_df = prophet_df.reset_index()
-    prophet_df.columns = ["ds", "y"]
-    prophet_df["ds"] = prophet_df["ds"].dt.tz_localize(None)
-    return prophet_df
+    """Convert OHLCV dataframe to Prophet's ds/y format with RSI and volume regressors."""
+    pdf = df[["Close", "Volume"]].copy()
+    pdf.index = pd.to_datetime(pdf.index)
+    pdf = pdf.reset_index()
+    pdf.columns = ["ds", "y", "volume"]
+    pdf["ds"] = pdf["ds"].dt.tz_localize(None)
+
+    # RSI — fill early NaN periods with neutral 50
+    pdf["rsi"] = _compute_rsi(pdf["y"]).fillna(50.0)
+
+    # Volume as ratio vs 20-day rolling mean — keeps values near 1.0 regardless of stock size
+    # Clipped to [0.1, 5.0] to prevent extreme outliers (halts, block deals) from destabilising the model
+    vol_mean = pdf["volume"].rolling(20, min_periods=1).mean()
+    pdf["volume_ratio"] = (pdf["volume"] / vol_mean).fillna(1.0).clip(0.1, 5.0)
+
+    return pdf
 
 
 def run_prophet_prediction(df: pd.DataFrame, horizon_days: int) -> dict:
@@ -48,9 +65,20 @@ def run_prophet_prediction(df: pd.DataFrame, horizon_days: int) -> dict:
         holidays=holidays_df,
         interval_width=0.80,
     )
-    model.fit(prophet_df)
+    model.add_regressor("rsi", standardize=True)
+    model.add_regressor("volume_ratio", standardize=True)
+    model.fit(prophet_df[["ds", "y", "rsi", "volume_ratio"]])
 
     future = model.make_future_dataframe(periods=horizon_days)
+
+    # Backfill known dates from training data; future dates get the 30-day rolling average
+    known = prophet_df.set_index("ds")[["rsi", "volume_ratio"]]
+    future = future.join(known, on="ds", how="left")
+    rsi_default = float(prophet_df["rsi"].tail(30).mean())
+    vol_default = float(prophet_df["volume_ratio"].tail(30).mean())
+    future["rsi"] = future["rsi"].fillna(rsi_default)
+    future["volume_ratio"] = future["volume_ratio"].fillna(vol_default)
+
     forecast = model.predict(future)
 
     current_price = float(df["Close"].iloc[-1])
@@ -64,7 +92,7 @@ def run_prophet_prediction(df: pd.DataFrame, horizon_days: int) -> dict:
 
     return {
         "forecast_df": forecast,
-        "historical_df": prophet_df,
+        "historical_df": prophet_df[["ds", "y"]],
         "current_price": round(current_price, 2),
         "predicted_price": round(predicted_price, 2),
         "predicted_low": round(max(predicted_low, 0), 2),

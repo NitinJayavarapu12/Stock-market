@@ -371,6 +371,135 @@ def send_watchlist_spike_alert(to: str, symbol: str, stats: dict, commentary: st
     return _send(to, subject, html)
 
 
+def send_portfolio_move_alert(
+    to: str,
+    symbol: str,
+    company: str,
+    direction: str,
+    stats: dict,
+    holding: dict,
+):
+    """Send an alert when a portfolio holding moves >= 3% in a day, with full P&L context."""
+    sym_clean = symbol.replace(".NS", "").replace(".BO", "")
+    company = company or sym_clean
+    icon = "📈" if direction == "up" else "📉"
+    color = "#4ade80" if direction == "up" else "#f87171"
+    direction_word = "jumped" if direction == "up" else "dropped"
+
+    day_change_pct = stats.get("day_change_pct", 0) or 0
+    current_price = stats.get("price", 0) or 0
+    week_52_high = stats.get("week_52_high", 0) or 0
+    sign = "+" if day_change_pct >= 0 else ""
+
+    qty = float(holding.get("quantity", 0) or 0)
+    avg_buy_price = float(holding.get("avg_buy_price", 0) or 0)
+    invested = round(qty * avg_buy_price, 2)
+    current_value = round(qty * (current_price or avg_buy_price), 2)
+    total_pnl = round(current_value - invested, 2)
+    total_pnl_pct = round((total_pnl / invested * 100), 2) if invested > 0 else 0
+    pnl_color = "#4ade80" if total_pnl >= 0 else "#f87171"
+    pnl_sign = "+" if total_pnl >= 0 else ""
+
+    position_cards = (
+        _card("Invested", f"₹{invested:,.0f}", f"{qty:g} × ₹{avg_buy_price:,.2f}", "#e2e8f0") +
+        _card("Current Value", f"₹{current_value:,.0f}", "", "#ffffff") +
+        _card("Total P&L", f"{pnl_sign}₹{abs(total_pnl):,.0f}", f"{pnl_sign}{total_pnl_pct:.1f}%", pnl_color)
+    ) if invested > 0 else ""
+
+    body = f"""
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 16px">
+      {icon} <strong style="color:#fff">{company}</strong> ({sym_clean}) from your portfolio has
+      <strong style="color:{color}">{direction_word} {sign}{day_change_pct:.2f}%</strong> today.
+    </p>
+    <div style="margin-bottom:20px">
+      {_card("Current Price", f"₹{current_price:,.2f}", "", "#ffffff")}
+      {_card("Day Change", f"{sign}{day_change_pct:.2f}%", "", color)}
+      {_card("52W High", f"₹{week_52_high:,.2f}", "", "#94a3b8") if week_52_high else ""}
+    </div>
+    <p style="color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 10px">
+      💼 Your Position
+    </p>
+    <div style="margin-bottom:16px">{position_cards}</div>"""
+
+    now = datetime.now(IST)
+    html = _base_template(
+        f"{icon} Portfolio Alert: {company}",
+        now.strftime("%A, %d %B %Y — %I:%M %p IST"),
+        body,
+    )
+    subject = f"{icon} {sym_clean} {direction_word} {sign}{day_change_pct:.2f}% — Portfolio Alert"
+    return _send(to, subject, html)
+
+
+def send_recommendation_email(to: str, recommendations: list):
+    """Send daily buy opportunity scan results — up to 5 stocks with AI commentary."""
+    if not recommendations:
+        return False
+
+    now = datetime.now(IST)
+    date_str = now.strftime("%A, %d %B %Y")
+
+    blocks = []
+    for rec in recommendations[:5]:
+        sym_clean = rec["symbol"].replace(".NS", "").replace(".BO", "")
+        company = rec.get("company") or sym_clean
+        price = rec.get("price", 0)
+        day_change_pct = rec.get("day_change_pct", 0) or 0
+        prophet_upside = rec.get("prophet_upside_pct", 0) or 0
+        score = rec.get("composite_score", 0)
+        rsi = rec.get("rsi", "—")
+        macd_signal = rec.get("macd_signal", "—")
+        bb_position = rec.get("bb_position", "—")
+        ai_commentary = rec.get("ai_commentary", "")
+
+        upside_color = "#4ade80" if prophet_upside >= 0 else "#f87171"
+        upside_sign = "+" if prophet_upside >= 0 else ""
+        day_sign = "+" if day_change_pct >= 0 else ""
+        day_color = "#4ade80" if day_change_pct >= 0 else "#f87171"
+
+        commentary_html = ""
+        if ai_commentary:
+            lines = ai_commentary.strip().replace("\n\n", "\n").split("\n")
+            commentary_html = "".join(
+                f"<p style='color:#e2e8f0;font-size:14px;margin:6px 0'>{line}</p>"
+                for line in lines if line.strip()
+            )
+
+        blocks.append(f"""
+        <div style="margin-bottom:28px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <div>
+              <h3 style="color:#ffffff;font-size:16px;font-weight:700;margin:0">{company}</h3>
+              <p style="color:#64748b;font-size:12px;margin:2px 0 0">{rec['symbol']}</p>
+            </div>
+            <span style="background:#1e2130;border:1px solid #334155;border-radius:20px;padding:3px 10px;color:#94a3b8;font-size:11px;font-weight:600">
+              Score: {score:.0f}/100
+            </span>
+          </div>
+          <div style="margin-bottom:12px">
+            {_card("Current Price", f"₹{price:,.2f}", f"{day_sign}{day_change_pct:.2f}% today", day_color)}
+            {_card("1-Month Upside", f"{upside_sign}{prophet_upside:.1f}%", "Model forecast", upside_color)}
+          </div>
+          <div style="background:#12141e;border-left:3px solid #3b82f6;border-radius:4px;padding:14px;margin-bottom:10px">
+            <p style="color:#64748b;font-size:11px;font-weight:600;margin:0 0 8px;text-transform:uppercase">Why It Looks Interesting</p>
+            {commentary_html or f"<p style='color:#94a3b8;font-size:13px'>{company} shows technical buy signals with {upside_sign}{prophet_upside:.1f}% model upside.</p>"}
+          </div>
+          <p style="color:#475569;font-size:11px;margin:0">
+            RSI {rsi} &nbsp;·&nbsp; {macd_signal} &nbsp;·&nbsp; {bb_position}
+          </p>
+        </div>
+        <hr style="border:none;border-top:1px solid #1e293b;margin:0 0 24px">""")
+
+    body = "".join(blocks) + """
+    <p style="color:#475569;font-size:12px;margin-top:8px">
+      These are screener results, not personalised recommendations. Always do your own research before investing.
+    </p>"""
+
+    html = _base_template("📈 Today's Buy Opportunities", date_str, body)
+    subject = f"📈 Buy Opportunity Scan — {len(recommendations)} stock(s) flagged today"
+    return _send(to, subject, html)
+
+
 def send_price_alert(to: str, symbol: str, current_price: float, threshold: float, direction: str):
     sym_clean = symbol.replace(".NS", "").replace(".BO", "")
     direction_word = "risen above" if direction == "above" else "fallen below"

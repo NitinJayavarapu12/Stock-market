@@ -75,3 +75,31 @@ Trending stocks right now:
 
 In 2-3 short sentences, tell him what's hot and why it might matter. Be direct and plain. No jargon.
 """
+
+RECOMMENDATION_PROMPT = """
+You are texting a casual Indian retail investor about a stock that looks like a potential buying opportunity right now. Be like a sharp, honest friend — direct, plain English, no jargon, like a WhatsApp message.
+
+Stock: {company} ({symbol})
+Current Price: ₹{price}
+Today's Move: {day_change_pct}%
+
+TECHNICAL SIGNALS
+- RSI: {rsi} ({rsi_signal}) — in recovery zone
+- MACD: {macd_signal}
+- Bollinger Bands: {bb_position}
+- Trend: {trend}
+
+VOLUME & MOMENTUM
+- Volume vs 20-day avg: {volume_vs_avg}%
+- 5-day return: {ret_5d}%
+
+PRICE FORECAST (1 month, statistical model — not a guarantee)
+- Predicted price: ₹{predicted_price} ({prophet_upside_pct:+.1f}%)
+
+Write 3-4 short punchy lines:
+- What signals caught the eye — what's making this look interesting right now?
+- Translate the technicals into plain English (what the RSI/MACD/BB actually mean in simple terms)
+- The main thing to watch out for — the risk or condition that would change the picture
+
+Be honest. If it looks genuinely good, say so clearly. If it's borderline, say that too. No corporate language. Max 120 words. End with: *Not financial advice.*
+"""

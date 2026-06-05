@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from ai.prompts import STOCK_INSIGHT_PROMPT, MARKET_OVERVIEW_PROMPT, TRENDING_COMMENTARY_PROMPT, ALERT_COMMENTARY_PROMPT
+from ai.prompts import STOCK_INSIGHT_PROMPT, MARKET_OVERVIEW_PROMPT, TRENDING_COMMENTARY_PROMPT, ALERT_COMMENTARY_PROMPT, RECOMMENDATION_PROMPT
 
 try:
     from google import genai
@@ -166,6 +166,53 @@ def generate_alert_commentary(symbol: str, alert_type: str, z_score: float,
         z_score=f"{z_score:+.2f}",
         z_description=z_description,
         mean_return_pct=f"{mean_return_pct:+.4f}",
+    )
+
+    for model in MODELS:
+        try:
+            response = client.models.generate_content(model=model, contents=prompt)
+            return response.text or ""
+        except Exception as e:
+            if _is_rate_limit(e) and model != MODELS[-1]:
+                continue
+            if _is_rate_limit(e):
+                from ai.groq_client import complete_groq
+                return complete_groq(prompt)
+            return ""
+    return ""
+
+
+def generate_recommendation_commentary(
+    symbol: str,
+    company: str,
+    stats: dict,
+    indicators: dict,
+    prophet_upside_pct: float,
+) -> str:
+    """Generate a short buy-opportunity commentary for the daily recommendation email."""
+    if not GEMINI_AVAILABLE:
+        return ""
+    client = _get_client()
+    if client is None:
+        return ""
+
+    price = stats.get("price", 0)
+    predicted_price = round(price * (1 + prophet_upside_pct / 100), 2) if price else 0
+
+    prompt = RECOMMENDATION_PROMPT.format(
+        symbol=symbol,
+        company=company,
+        price=price,
+        day_change_pct=stats.get("day_change_pct", 0),
+        rsi=indicators.get("rsi", "N/A"),
+        rsi_signal=indicators.get("rsi_signal", "N/A"),
+        macd_signal=indicators.get("macd_signal", "N/A"),
+        bb_position=indicators.get("bb_position", "N/A"),
+        trend=indicators.get("trend", "N/A"),
+        volume_vs_avg=indicators.get("volume_vs_avg_pct", stats.get("volume_spike_pct", 0)),
+        ret_5d=stats.get("ret_5d", 0),
+        predicted_price=predicted_price,
+        prophet_upside_pct=prophet_upside_pct,
     )
 
     for model in MODELS:

@@ -96,6 +96,16 @@ export default function Watchlist() {
 
   const [emailInput, setEmailInput] = useState('')
   const [emailSaved, setEmailSaved] = useState(false)
+  const [prefsSaved, setPrefsSaved] = useState(false)
+
+  const NOTIF_LABELS = [
+    { key: 'notif_daily_reports',    label: 'Morning & Evening Reports',   desc: '9:15 AM open + 3:35 PM close emails' },
+    { key: 'notif_price_alerts',     label: 'Price Threshold Alerts',      desc: 'When a stock crosses your set price' },
+    { key: 'notif_market_anomaly',   label: 'Market Anomaly Alerts',       desc: 'Unusual NIFTY/SENSEX moves (2σ+)' },
+    { key: 'notif_watchlist_spikes', label: 'Watchlist Spike Alerts',      desc: 'Unusual moves in your watchlist' },
+    { key: 'notif_portfolio_moves',  label: 'Portfolio Move Alerts',       desc: 'When a holding moves ≥3% intraday' },
+    { key: 'notif_recommendations',  label: 'Daily Buy Recommendations',   desc: 'Morning scan for buying opportunities' },
+  ]
 
   const addMutation = useMutation({
     mutationFn: (sym) => api.post(`/api/watchlist/${sym}`),
@@ -113,6 +123,16 @@ export default function Watchlist() {
     setEmailSaved(true)
     refetchAlerts()
     setTimeout(() => setEmailSaved(false), 2000)
+  }
+
+  async function togglePref(key, value) {
+    await api.put('/api/alerts/preferences', { [key]: value })
+    refetchAlerts()
+  }
+
+  async function savePrefs() {
+    setPrefsSaved(true)
+    setTimeout(() => setPrefsSaved(false), 1500)
   }
 
   async function saveAlert(symbol, thresholds) {
@@ -143,7 +163,6 @@ export default function Watchlist() {
         <h2 className="text-sm font-semibold text-white mb-1">📧 Email Alerts & Reports</h2>
         <p className="text-slate-400 text-xs mb-3">
           Receive price alerts and daily market reports (opening at 9:15am + closing at 3:35pm IST).
-          Requires Gmail SMTP credentials in your <code className="text-slate-300">.env</code> file.
         </p>
         <form onSubmit={saveEmail} className="flex gap-2">
           <input
@@ -161,6 +180,40 @@ export default function Watchlist() {
           </button>
         </form>
       </div>
+
+      {/* Notification toggles */}
+      {currentEmail && (
+        <div className="bg-[#1e2130] rounded-xl p-5 border border-slate-700/50">
+          <h2 className="text-sm font-semibold text-white mb-1">🔔 Notification Settings</h2>
+          <p className="text-slate-400 text-xs mb-4">Choose which emails you want to receive.</p>
+          <div className="space-y-3">
+            {NOTIF_LABELS.map(({ key, label, desc }) => {
+              const prefs = alertsData?.preferences || {}
+              const enabled = prefs[key] !== false
+              return (
+                <div key={key} className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-slate-200 text-sm">{label}</p>
+                    <p className="text-slate-500 text-xs">{desc}</p>
+                  </div>
+                  <button
+                    onClick={() => togglePref(key, !enabled)}
+                    className={`shrink-0 relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      enabled ? 'bg-blue-600' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        enabled ? 'translate-x-4' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <LoadingSpinner text="Loading watchlist..." />
